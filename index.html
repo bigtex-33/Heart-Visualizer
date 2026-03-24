@@ -5,27 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Garmin Heart Beat Replay</title>
     <style>
-        body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        body { margin: 0; background: #0a0a0a; color: white; font-family: sans-serif; overflow: hidden; }
         #ui { position: absolute; top: 20px; left: 20px; z-index: 10; background: rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 15px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); width: 280px; }
-        #bpm-display { font-size: 80px; font-weight: 800; line-height: 1; margin: 10px 0; transition: color 0.3s; }
-        #status { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #aaa; }
-        .zone-pill { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; margin-top: 10px; font-weight: bold; }
-        input[type="file"] { margin-bottom: 15px; width: 100%; color: #ccc; }
-        #summary { margin-top: 15px; display: none; border-top: 1px solid #444; pt: 10px; }
+        #bpm-display { font-size: 80px; font-weight: 800; line-height: 1; margin: 10px 0; }
+        #status { font-size: 12px; text-transform: uppercase; color: #ffcc00; margin-bottom: 5px; }
+        .error { color: #ff4444 !important; font-weight: bold; }
+        .control-group { margin-bottom: 15px; }
+        label { font-size: 11px; color: #aaa; display: block; margin-bottom: 5px; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+        #summary { margin-top: 15px; display: none; border-top: 1px solid #444; padding-top: 10px; }
     </style>
 </head>
 <body>
 
     <div id="ui">
-        <div id="status">Ready for Data</div>
-        <input type="file" id="gpxInput" accept=".gpx">
+        <div id="status">Upload GPX to Start</div>
+        
+        <div class="control-group">
+            <label>1. CHOOSE FILE</label>
+            <input type="file" id="gpxInput" accept=".gpx">
+        </div>
+
+        <div class="control-group">
+            <label>2. REPLAY SPEED: <span id="speedValue">5</span>x</label>
+            <input type="range" id="speedSlider" min="1" max="50" value="5">
+        </div>
         
         <div id="bpm-display">--</div>
-        <div id="zone-label" class="zone-pill">No Data</div>
+        <div id="zone-label">Standing By</div>
 
         <div id="summary">
-            <p style="font-size: 12px; color: #888;">WORKOUT SUMMARY</p>
-            <div id="zone-stats" style="font-size: 14px;"></div>
+            <p style="font-size: 11px; color: #888;">WORKOUT STATS</p>
+            <div id="zone-stats" style="font-size: 13px;"></div>
         </div>
     </div>
 
@@ -43,133 +54,134 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Simple Heart Geometry
-        const x = 0, y = 0;
         const heartShape = new THREE.Shape();
-        heartShape.moveTo( x + 5, y + 5 );
-        heartShape.bezierCurveTo( x + 5, y + 5, x + 4, y, x, y );
-        heartShape.bezierCurveTo( x - 6, y, x - 6, y + 7,x - 6, y + 7 );
-        heartShape.bezierCurveTo( x - 6, y + 11, x - 3, y + 15.4, x + 5, y + 19 );
-        heartShape.bezierCurveTo( x + 12, y + 15.4, x + 16, y + 11, x + 16, y + 7 );
-        heartShape.bezierCurveTo( x + 16, y + 7, x + 16, y, x + 10, y );
-        heartShape.bezierCurveTo( x + 7, y, x + 5, y + 5, x + 5, y + 5 );
+        heartShape.moveTo(5, 5);
+        heartShape.bezierCurveTo(5, 5, 4, 0, 0, 0);
+        heartShape.bezierCurveTo(-6, 0, -6, 7, -6, 7);
+        heartShape.bezierCurveTo(-6, 11, -3, 15.4, 5, 19);
+        heartShape.bezierCurveTo(12, 15.4, 16, 11, 16, 7);
+        heartShape.bezierCurveTo(16, 7, 16, 0, 10, 0);
+        heartShape.bezierCurveTo(7, 0, 5, 5, 5, 5);
 
-        const geometry = new THREE.ExtrudeGeometry(heartShape, { depth: 2, bevelEnabled: true, bevelSize: 1, bevelThickness: 1 });
-        const material = new THREE.MeshPhongMaterial({ color: 0x333333, shininess: 100 });
+        const geometry = new THREE.ExtrudeGeometry(heartShape, { depth: 2, bevelEnabled: true });
+        const material = new THREE.MeshPhongMaterial({ color: 0x444444, shininess: 80 });
         const heartMesh = new THREE.Mesh(geometry, material);
-        
-        heartMesh.scale.set(0.3, 0.3, 0.3);
-        heartMesh.rotation.z = Math.PI; // Flip upright
+        heartMesh.scale.set(0.4, 0.4, 0.4);
+        heartMesh.rotation.z = Math.PI;
         scene.add(heartMesh);
 
-        const light1 = new THREE.PointLight(0xffffff, 500);
-        light1.position.set(10, 10, 10);
-        scene.add(light1);
-        scene.add(new THREE.AmbientLight(0x404040, 2));
+        const light = new THREE.PointLight(0xffffff, 600);
+        light.position.set(10, 10, 10);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
         camera.position.z = 25;
 
-        // --- 2. LOGIC VARIABLES ---
-        let rotationSpeed = 0.01;
-        let zoneCounts = { resting: 0, active: 0, workout: 0 };
+        // --- 2. LOGIC & CONTROLS ---
+        let rotationSpeed = 0.005;
+        let replaySpeed = 5;
+        let maxHR = 0;
+        let isReplaying = false;
 
-        const uiElements = {
-            input: document.getElementById('gpxInput'),
-            bpm: document.getElementById('bpm-display'),
+        const ui = {
             status: document.getElementById('status'),
+            bpm: document.getElementById('bpm-display'),
             zone: document.getElementById('zone-label'),
+            stats: document.getElementById('zone-stats'),
             summary: document.getElementById('summary'),
-            stats: document.getElementById('zone-stats')
+            speedValue: document.getElementById('speedValue'),
+            speedSlider: document.getElementById('speedSlider')
         };
 
-        // --- 3. THE REPLAY ENGINE ---
-        uiElements.input.addEventListener('change', (e) => {
-            const file = e.target.files[0];
+        ui.speedSlider.addEventListener('input', (e) => {
+            replaySpeed = e.target.value;
+            ui.speedValue.innerText = replaySpeed;
+        });
+
+        document.getElementById('gpxInput').addEventListener('change', (e) => {
             const reader = new FileReader();
             reader.onload = (event) => startReplay(event.target.result);
-            reader.readAsText(file);
+            reader.readAsText(e.target.files[0]);
         });
 
         async function startReplay(xmlString) {
+            if (isReplaying) return; // Prevent double playback
+            isReplaying = true;
+            maxHR = 0;
+
             const parser = new DOMParser();
             const xml = parser.parseFromString(xmlString, "text/xml");
-            const points = xml.querySelectorAll('trkpt');
+            const points = Array.from(xml.querySelectorAll('trkpt'));
             
-            uiElements.status.innerText = "Replaying Workout...";
-            uiElements.summary.style.display = "none";
-            zoneCounts = { resting: 0, active: 0, workout: 0 };
+            // Check for HR tags using a selector that handles namespaces (gpxdata, gpxtpx, or plain hr)
+            const hasHR = points.some(pt => pt.innerHTML.includes('hr>'));
+
+            if (!hasHR) {
+                ui.status.innerText = "ERROR: NO HR DATA";
+                ui.status.className = "error";
+                isReplaying = false;
+                return;
+            }
+
+            ui.status.innerText = "Replaying...";
+            ui.status.className = "";
+            ui.summary.style.display = "none";
 
             for (let i = 0; i < points.length; i++) {
-                const hrTag = points[i].getElementsByTagName('gpxtpx:hr')[0] || points[i].getElementsByTagName('hr')[0];
-                
-                if (hrTag) {
-                    const bpm = parseInt(hrTag.textContent);
-                    updateVisuals(bpm);
+                // Find HR using TagName to be most compatible with your RideWithGPS file
+                let hrVal = null;
+                const extensions = points[i].getElementsByTagName('extensions')[0];
+                if (extensions) {
+                    const hrTags = extensions.querySelectorAll('*');
+                    for (let tag of hrTags) {
+                        if (tag.tagName.toLowerCase().includes('hr')) {
+                            hrVal = parseInt(tag.textContent);
+                            break;
+                        }
+                    }
+                }
+
+                if (hrVal) {
+                    if (hrVal > maxHR) maxHR = hrVal;
+                    updateHeart(hrVal);
                 }
 
                 if (i < points.length - 1) {
-                    const time1 = new Date(points[i].querySelector('time').textContent);
-                    const time2 = new Date(points[i+1].querySelector('time').textContent);
-                    const delay = Math.max(time2 - time1, 0); // Handle potential GPS overlap
-                    await new Promise(r => setTimeout(r, delay / 2)); // 2x speed for previewing
+                    const t1 = new Date(points[i].querySelector('time').textContent);
+                    const t2 = new Date(points[i+1].querySelector('time').textContent);
+                    const diff = Math.max(t2 - t1, 0);
+                    // Use the dynamic replaySpeed value
+                    await new Promise(r => setTimeout(r, diff / replaySpeed));
                 }
             }
-            showSummary();
+            ui.status.innerText = "Finished";
+            ui.summary.style.display = "block";
+            ui.stats.innerHTML = `Peak Heart Rate: <b>${maxHR} BPM</b>`;
+            isReplaying = false;
         }
 
-        function updateVisuals(bpm) {
-            uiElements.bpm.innerText = bpm;
-            
-            let color, label, zone;
-            if (bpm < 100) {
-                color = 0x3498db; // Blue
-                label = "RESTING";
-                zone = 'resting';
-            } else if (bpm < 145) {
-                color = 0x2ecc71; // Green
-                label = "ACTIVE";
-                zone = 'active';
-            } else {
-                color = 0xe74c3c; // Red
-                label = "WORKOUT!";
-                zone = 'workout';
-            }
+        function updateHeart(bpm) {
+            ui.bpm.innerText = bpm;
+            let color = 0x3498db; 
+            if (bpm > 100) color = 0x2ecc71; 
+            if (bpm > 145) color = 0xe74c3c; 
 
-            zoneCounts[zone]++;
-            uiElements.bpm.style.color = `#${color.toString(16).padStart(6, '0')}`;
-            uiElements.zone.innerText = label;
-            uiElements.zone.style.background = uiElements.bpm.style.color;
-            uiElements.zone.style.color = "white";
-            
-            // Trigger 3D Thump
             heartMesh.material.color.setHex(color);
-            rotationSpeed = 0.01 + (bpm / 2000);
+            ui.bpm.style.color = `#${color.toString(16).padStart(6, '0')}`;
+            rotationSpeed = 0.005 + (bpm / 3000);
             
-            heartMesh.scale.set(0.4, 0.4, 0.4);
-            setTimeout(() => heartMesh.scale.set(0.3, 0.3, 0.3), 100);
+            heartMesh.scale.set(0.48, 0.48, 0.48);
+            setTimeout(() => heartMesh.scale.set(0.4, 0.4, 0.4), 100);
         }
 
-        function showSummary() {
-            uiElements.status.innerText = "Replay Finished";
-            uiElements.summary.style.display = "block";
-            uiElements.stats.innerHTML = `
-                Resting: ${zoneCounts.resting}s<br>
-                Active: ${zoneCounts.active}s<br>
-                High Intensity: ${zoneCounts.workout}s
-            `;
-        }
-
-        // --- 4. RENDER LOOP ---
         function animate() {
             requestAnimationFrame(animate);
             heartMesh.rotation.y += rotationSpeed;
             renderer.render(scene, camera);
         }
-        
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        animate();
+    </script>
+</body>
+</html>
 
         animate();
     </script>
