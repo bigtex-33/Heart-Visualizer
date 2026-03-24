@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anatomical Heart Replay</title>
+    <title>Anatomical Heart Visualizer</title>
     <style>
         body { margin: 0; background: #000; color: white; font-family: 'Courier New', monospace; overflow: hidden; }
-        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; background: rgba(0, 0, 0, 0.8); padding: 25px; border-radius: 12px; border: 1px solid #330000; width: 280px; }
+        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; background: rgba(0, 0, 0, 0.85); padding: 25px; border-radius: 12px; border: 1px solid #440000; width: 280px; box-shadow: 0 0 20px rgba(255,0,0,0.2); }
         #bpm-display { font-size: 72px; font-weight: 900; color: #ff3333; margin: 10px 0; text-shadow: 0 0 15px rgba(255,0,0,0.5); }
         .btn-row { display: flex; gap: 10px; margin-bottom: 20px; }
-        button { flex: 1; padding: 12px; cursor: pointer; background: #200; border: 1px solid #ff3333; color: white; font-weight: bold; text-transform: uppercase; }
-        button:hover { background: #400; }
-        button:disabled { opacity: 0.3; cursor: not-allowed; }
-        input[type="range"] { width: 100%; accent-color: #ff3333; }
-        label { font-size: 10px; color: #888; letter-spacing: 1px; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; background: radial-gradient(circle, rgba(255,0,0,0) 0%, rgba(255,0,0,0) 100%); transition: background 0.1s; }
+        button { flex: 1; padding: 12px; cursor: pointer; background: #200; border: 1px solid #ff3333; color: white; font-weight: bold; text-transform: uppercase; transition: 0.2s; }
+        button:hover:not(:disabled) { background: #500; }
+        button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #444; }
+        input[type="range"] { width: 100%; accent-color: #ff3333; cursor: pointer; }
+        label { font-size: 10px; color: #888; letter-spacing: 1px; display: block; margin-bottom: 5px; }
+        #status { font-size: 11px; color: #ff8888; margin-bottom: 10px; border-bottom: 1px solid #300; padding-bottom: 5px; }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transition: background 0.1s; z-index: 1; }
     </style>
 </head>
 <body>
@@ -22,17 +23,25 @@
     <div id="overlay"></div>
 
     <div id="ui">
-        <div id="status" style="color:#ff8888; font-size:11px;">SYSTEM READY</div>
-        <div style="margin-top:15px;"><label>LOAD WORKOUT (.GPX)</label><input type="file" id="gpxInput" accept=".gpx"></div>
-        <div style="margin:20px 0;">
-            <div class="btn-row">
-                <button id="playBtn" disabled>Play</button>
-                <button id="pauseBtn" disabled>Pause</button>
-            </div>
+        <div id="status">SYSTEM READY</div>
+        
+        <div style="margin-bottom:15px;">
+            <label>1. LOAD WORKOUT (.GPX)</label>
+            <input type="file" id="gpxInput" accept=".gpx">
         </div>
-        <div><label>REPLAY SPEED: <span id="speedValue">10</span>x</label><input type="range" id="speedSlider" min="1" max="100" value="10"></div>
+
+        <div class="btn-row">
+            <button id="playBtn" disabled>Play</button>
+            <button id="pauseBtn" disabled>Pause</button>
+        </div>
+
+        <div style="margin-bottom:20px;">
+            <label>REPLAY SPEED: <span id="speedValue" style="color:white">10</span>x</label>
+            <input type="range" id="speedSlider" min="1" max="100" value="10">
+        </div>
+        
         <div id="bpm-display">--</div>
-        <div id="zone-label" style="font-weight:bold; letter-spacing:2px; color:#ffaaaa;">AWAITING SIGNAL</div>
+        <div id="zone-label" style="font-weight:bold; letter-spacing:2px; font-size: 14px; color:#ffaaaa;">AWAITING DATA</div>
     </div>
 
     <script type="importmap">
@@ -42,130 +51,23 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- 1. ENGINE SETUP ---
+        // --- 1. THREE.JS SCENE SETUP ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- 2. TEXTURE & MODEL ---
-        // MAKE SURE THIS FILENAME MATCHES YOUR GITHUB IMAGE EXACTLY
-        const texture = new THREE.TextureLoader().load('heart_image.jpg'); 
-        const material = new THREE.MeshStandardMaterial({ 
-            map: texture, 
-            roughness: 0.3,
-            metalness: 0.2
-        });
+        // --- 2. TEXTURE LOADING ---
+        const textureLoader = new THREE.TextureLoader();
+        // CHANGE 'heart_texture.jpg' TO YOUR IMAGE FILENAME IF DIFFERENT
+        const heartTex = textureLoader.load('heart_texture.jpg', 
+            () => { console.log("Texture loaded successfully"); },
+            undefined,
+            (err) => { console.error("Texture failed to load. Check filename."); }
+        );
 
-        const heartGroup = new THREE.Group();
-        // Lower chamber (Ventricles)
-        const ventricle = new THREE.Mesh(new THREE.SphereGeometry(7, 64, 64), material);
-        ventricle.scale.set(1, 1.4, 0.9);
-        heartGroup.add(ventricle);
-
-        // Upper vessels (Aorta/Arteries)
-        const aorta = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2, 8, 32), material);
-        aorta.position.set(2, 6, -1);
-        aorta.rotation.z = -0.3;
-        heartGroup.add(aorta);
-
-        scene.add(heartGroup);
-
-        const light = new THREE.DirectionalLight(0xffffff, 2.5);
-        light.position.set(10, 10, 10);
-        scene.add(light);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-        camera.position.z = 25;
-
-        // --- 3. REPLAY LOGIC ---
-        let replaySpeed = 10;
-        let isPaused = true;
-        let currentIdx = 0;
-        let points = [];
-        let heartCycleInterval = null;
-        const overlay = document.getElementById('overlay');
-
-        const ui = {
-            play: document.getElementById('playBtn'),
-            pause: document.getElementById('pauseBtn'),
-            speed: document.getElementById('speedSlider'),
-            speedVal: document.getElementById('speedValue'),
-            bpm: document.getElementById('bpm-display'),
-            status: document.getElementById('status'),
-            zone: document.getElementById('zone-label')
-        };
-
-        ui.speed.oninput = (e) => { replaySpeed = e.target.value; ui.speedVal.innerText = replaySpeed; };
-
-        document.getElementById('gpxInput').onchange = (e) => {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const xml = new DOMParser().parseFromString(event.target.result, "text/xml");
-                points = Array.from(xml.querySelectorAll('trkpt'));
-                ui.play.disabled = false;
-                ui.status.innerText = "DATA LOADED: " + points.length + " POINTS";
-            };
-            reader.readAsText(e.target.files[0]);
-        };
-
-        ui.play.onclick = () => { isPaused = false; ui.play.disabled = true; ui.pause.disabled = false; runReplay(); };
-        ui.pause.onclick = () => { isPaused = true; ui.play.disabled = false; ui.pause.disabled = true; stopHeart(); };
-
-        async function runReplay() {
-            while (currentIdx < points.length && !isPaused) {
-                const pt = points[currentIdx];
-                const hrTag = pt.getElementsByTagNameNS("*", "hr")[0] || pt.querySelector('hr');
-                if (hrTag) startHeartSync(parseInt(hrTag.textContent));
-
-                const t1 = new Date(pt.querySelector('time').textContent);
-                const t2 = (currentIdx < points.length - 1) ? new Date(points[currentIdx+1].querySelector('time').textContent) : t1;
-                await new Promise(r => setTimeout(r, Math.max(t2 - t1, 0) / replaySpeed));
-                currentIdx++;
-            }
-        }
-
-        // --- 4. THE ANATOMICAL SYNC ---
-        function startHeartSync(bpm) {
-            ui.bpm.innerText = bpm;
-            stopHeart();
-            const msPerBeat = (60 / bpm) * 1000;
-            
-            heartCycleInterval = setInterval(() => {
-                // LUB (Atrial squeeze)
-                heartGroup.scale.set(1.06, 1.02, 1.06);
-                overlay.style.background = "radial-gradient(circle, rgba(255,0,0,0.1) 0%, rgba(0,0,0,0) 70%)";
-
-                setTimeout(() => {
-                    // DUB (Ventricle pulse - Big push)
-                    heartGroup.scale.set(1.18, 1.1, 1.18);
-                    overlay.style.background = "radial-gradient(circle, rgba(255,0,0,0.25) 0%, rgba(0,0,0,0) 80%)";
-                    
-                    setTimeout(() => {
-                        heartGroup.scale.set(1, 1, 1);
-                        overlay.style.background = "transparent";
-                    }, msPerBeat * 0.2);
-                }, msPerBeat * 0.15);
-            }, msPerBeat);
-
-            // Update Intensity Zone
-            if (bpm > 150) ui.zone.innerText = "PEAK EFFORT";
-            else if (bpm > 115) ui.zone.innerText = "ACTIVE";
-            else ui.zone.innerText = "RESTING";
-        }
-
-        function stopHeart() { 
-            if (heartCycleInterval) clearInterval(heartCycleInterval); 
-            heartGroup.scale.set(1, 1, 1); 
-            overlay.style.background = "transparent";
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            heartGroup.rotation.y += 0.006;
-            renderer.render(scene, camera);
-        }
-        animate();
-    </script>
-</body>
-</html>
+        const heartMaterial = new THREE.MeshStandardMaterial({ 
+            map: heartTex,
+            color: 0xff
