@@ -19,27 +19,21 @@
     </style>
 </head>
 <body>
-
     <div id="overlay"></div>
-
     <div id="ui">
         <div id="status">SYSTEM READY</div>
-        
         <div style="margin-bottom:15px;">
             <label>1. LOAD WORKOUT (.GPX)</label>
             <input type="file" id="gpxInput" accept=".gpx">
         </div>
-
         <div class="btn-row">
             <button id="playBtn" disabled>Play</button>
             <button id="pauseBtn" disabled>Pause</button>
         </div>
-
         <div style="margin-bottom:20px;">
             <label>REPLAY SPEED: <span id="speedValue" style="color:white">10</span>x</label>
             <input type="range" id="speedSlider" min="1" max="100" value="10">
         </div>
-        
         <div id="bpm-display">--</div>
         <div id="zone-label" style="font-weight:bold; letter-spacing:2px; font-size: 14px; color:#ffaaaa;">AWAITING DATA</div>
     </div>
@@ -51,32 +45,19 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- 1. THREE.JS SCENE SETUP ---
+        // --- 1. UI DEFINITIONS ---
+        const ui = {
+            status: document.getElementById('status'),
+            play: document.getElementById('playBtn'),
+            pause: document.getElementById('pauseBtn'),
+            speed: document.getElementById('speedSlider'),
+            speedVal: document.getElementById('speedValue'),
+            bpm: document.getElementById('bpm-display'),
+            zone: document.getElementById('zone-label'),
+            input: document.getElementById('gpxInput'),
+            overlay: document.getElementById('overlay')
+        };
+
+        // --- 2. SCENE SETUP ---
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
-
-        // --- UPDATED TEXTURE LOADING ---
-const textureLoader = new THREE.TextureLoader();
-
-// Replace 'heart_texture.jpg' with your EXACT filename on GitHub
-const heartTex = textureLoader.load('heart_texture.jpg', 
-    (tex) => { 
-        console.log("SUCCESS: Image found and loaded.");
-        ui.status.innerText = "TEXTURE ACTIVE";
-    },
-    undefined,
-    (err) => { 
-        console.error("FAILURE: Could not find image.");
-        ui.status.innerText = "ERROR: IMAGE NOT FOUND";
-        // This helps you debug:
-        alert("The browser can't find 'heart_texture.jpg'. Make sure it's uploaded to GitHub with this exact name.");
-    }
-);
-
-        const heartMaterial = new THREE.MeshStandardMaterial({ 
-            map: heartTex,
-            color: 0xff
+        const camera = new THREE.PerspectiveCamera(75,
