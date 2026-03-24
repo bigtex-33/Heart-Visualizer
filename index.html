@@ -59,14 +59,23 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- 2. TEXTURE LOADING ---
-        const textureLoader = new THREE.TextureLoader();
-        // CHANGE 'heart_texture.jpg' TO YOUR IMAGE FILENAME IF DIFFERENT
-        const heartTex = textureLoader.load('heart_texture.jpg', 
-            () => { console.log("Texture loaded successfully"); },
-            undefined,
-            (err) => { console.error("Texture failed to load. Check filename."); }
-        );
+        // --- UPDATED TEXTURE LOADING ---
+const textureLoader = new THREE.TextureLoader();
+
+// Replace 'heart_texture.jpg' with your EXACT filename on GitHub
+const heartTex = textureLoader.load('heart_texture.jpg', 
+    (tex) => { 
+        console.log("SUCCESS: Image found and loaded.");
+        ui.status.innerText = "TEXTURE ACTIVE";
+    },
+    undefined,
+    (err) => { 
+        console.error("FAILURE: Could not find image.");
+        ui.status.innerText = "ERROR: IMAGE NOT FOUND";
+        // This helps you debug:
+        alert("The browser can't find 'heart_texture.jpg'. Make sure it's uploaded to GitHub with this exact name.");
+    }
+);
 
         const heartMaterial = new THREE.MeshStandardMaterial({ 
             map: heartTex,
